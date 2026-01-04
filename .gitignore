@@ -1,6 +1,7 @@
 # Build artifacts
 /build/
 /target/
+swift-wrapper/build/
 
 # Rust
 spacesaver-core/target/
