@@ -106,6 +106,7 @@ jobs:
             -framework AppKit \
             -framework CoreFoundation \
             -framework Security \
+            -framework SystemConfiguration \
             -o build/libSpacesaver.dylib \
             swift-wrapper/Spacesaver/SpacesaverView.swift \
             swift-wrapper/Spacesaver/ConfigureSheetController.swift 2>/dev/null || {
@@ -126,6 +127,7 @@ jobs:
                 -framework AppKit \
                 -framework CoreFoundation \
                 -framework Security \
+                -framework SystemConfiguration \
                 -o build/libSpacesaver-arm64.dylib \
                 swift-wrapper/Spacesaver/SpacesaverView.swift \
                 swift-wrapper/Spacesaver/ConfigureSheetController.swift
@@ -144,6 +146,7 @@ jobs:
                 -framework AppKit \
                 -framework CoreFoundation \
                 -framework Security \
+                -framework SystemConfiguration \
                 -o build/libSpacesaver-x86_64.dylib \
                 swift-wrapper/Spacesaver/SpacesaverView.swift \
                 swift-wrapper/Spacesaver/ConfigureSheetController.swift
