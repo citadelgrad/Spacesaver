@@ -108,7 +108,11 @@ impl NasaApodApi {
     }
 
     /// Fetch APODs for a date range
-    pub fn fetch_range(&self, start_date: NaiveDate, end_date: NaiveDate) -> Result<Vec<ApodResponse>> {
+    pub fn fetch_range(
+        &self,
+        start_date: NaiveDate,
+        end_date: NaiveDate,
+    ) -> Result<Vec<ApodResponse>> {
         let url = format!(
             "{}?api_key={}&start_date={}&end_date={}",
             APOD_BASE_URL,
@@ -136,10 +140,7 @@ impl NasaApodApi {
 
     /// Fetch random APODs
     pub fn fetch_random(&self, count: u32) -> Result<Vec<ApodResponse>> {
-        let url = format!(
-            "{}?api_key={}&count={}",
-            APOD_BASE_URL, self.api_key, count
-        );
+        let url = format!("{}?api_key={}&count={}", APOD_BASE_URL, self.api_key, count);
 
         log::debug!("Fetching {} random APODs", count);
 
@@ -183,7 +184,10 @@ mod tests {
 
         let apod: ApodResponse = serde_json::from_str(json).unwrap();
         assert_eq!(apod.title, "Test Image");
-        assert_eq!(apod.best_image_url(), Some("https://example.com/image_hd.jpg"));
+        assert_eq!(
+            apod.best_image_url(),
+            Some("https://example.com/image_hd.jpg")
+        );
         assert!(apod.is_image());
     }
 

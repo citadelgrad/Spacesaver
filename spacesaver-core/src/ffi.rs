@@ -4,7 +4,6 @@
 
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-use std::path::PathBuf;
 use std::ptr;
 use std::sync::Arc;
 
@@ -68,19 +67,23 @@ impl SpacesaverResult {
     fn err(msg: &str) -> Self {
         Self {
             success: false,
-            error: CString::new(msg).map(|s| s.into_raw()).unwrap_or(ptr::null_mut()),
+            error: CString::new(msg)
+                .map(|s| s.into_raw())
+                .unwrap_or(ptr::null_mut()),
         }
     }
 }
 
 /// Helper to convert Rust string to C string
 fn to_c_string(s: &str) -> *mut c_char {
-    CString::new(s).map(|s| s.into_raw()).unwrap_or(ptr::null_mut())
+    CString::new(s)
+        .map(|s| s.into_raw())
+        .unwrap_or(ptr::null_mut())
 }
 
 /// Helper to convert Option<String> to C string
 fn option_to_c_string(s: Option<&str>) -> *mut c_char {
-    s.map(|s| to_c_string(s)).unwrap_or(ptr::null_mut())
+    s.map(to_c_string).unwrap_or(ptr::null_mut())
 }
 
 // ============================================================================

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::ApodResponse;
 use crate::config::Config;
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 /// Metadata for a cached image
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,7 +103,10 @@ impl ImageCache {
 
     /// Get the file path for a cached image
     pub fn get_image_path(&self, date: &str) -> Option<PathBuf> {
-        self.index.images.get(date).map(|m| self.cache_dir.join(&m.filename))
+        self.index
+            .images
+            .get(date)
+            .map(|m| self.cache_dir.join(&m.filename))
     }
 
     /// Store an image in the cache
@@ -236,7 +239,7 @@ mod tests {
 
     fn create_test_cache() -> (ImageCache, TempDir) {
         let temp_dir = TempDir::new().unwrap();
-        let mut cache = ImageCache {
+        let cache = ImageCache {
             cache_dir: temp_dir.path().to_path_buf(),
             index: CacheIndex::default(),
             max_size: 10,

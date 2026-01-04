@@ -2,7 +2,6 @@
 
 use spacesaver_core::api::ApodResponse;
 use spacesaver_core::cache::{CacheIndex, CachedImageMetadata};
-use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
 
@@ -60,8 +59,10 @@ fn test_cache_index_persistence() {
     let index_path = temp_dir.path().join("index.json");
 
     // Create and populate index
-    let mut index = CacheIndex::default();
-    index.last_updated = 1705312800;
+    let mut index = CacheIndex {
+        last_updated: 1705312800,
+        ..Default::default()
+    };
 
     for i in 1..=5 {
         let date = format!("2024-01-{:02}", i);
@@ -71,7 +72,11 @@ fn test_cache_index_persistence() {
                 date: date.clone(),
                 title: format!("Image {}", i),
                 explanation: format!("Explanation {}", i),
-                copyright: if i % 2 == 0 { Some("NASA".to_string()) } else { None },
+                copyright: if i % 2 == 0 {
+                    Some("NASA".to_string())
+                } else {
+                    None
+                },
                 original_url: format!("https://example.com/{}.jpg", i),
                 filename: format!("apod_{}.jpg", date),
                 cached_at: 1705312800 + (i as i64 * 86400),

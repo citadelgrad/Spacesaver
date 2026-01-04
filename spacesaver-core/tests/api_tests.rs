@@ -46,7 +46,10 @@ fn test_minimal_apod_response() {
     assert!(apod.hdurl.is_none());
     assert!(apod.copyright.is_none());
     assert!(apod.thumbnail_url.is_none());
-    assert_eq!(apod.best_image_url(), Some("https://example.com/newyear.jpg"));
+    assert_eq!(
+        apod.best_image_url(),
+        Some("https://example.com/newyear.jpg")
+    );
 }
 
 /// Test YouTube video APOD

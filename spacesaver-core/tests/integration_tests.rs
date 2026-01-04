@@ -2,9 +2,7 @@
 //!
 //! These tests verify the library's core functionality works correctly.
 
-use spacesaver_core::{Config, ImageCache, NasaApodApi};
-use std::fs;
-use tempfile::TempDir;
+use spacesaver_core::{Config, NasaApodApi};
 
 /// Test that the default configuration is valid
 #[test]
@@ -132,23 +130,7 @@ fn test_apod_response_with_copyright() {
 }
 
 mod cache_tests {
-    use super::*;
-    use spacesaver_core::api::ApodResponse;
-    use spacesaver_core::cache::{CacheIndex, CachedImageMetadata, ImageCache};
-
-    fn create_test_apod(date: &str) -> ApodResponse {
-        ApodResponse {
-            date: date.to_string(),
-            title: format!("Test Image {}", date),
-            explanation: "Test explanation".to_string(),
-            url: format!("https://example.com/{}.jpg", date),
-            hdurl: None,
-            media_type: "image".to_string(),
-            copyright: None,
-            service_version: None,
-            thumbnail_url: None,
-        }
-    }
+    use spacesaver_core::cache::{CacheIndex, CachedImageMetadata};
 
     /// Test cache index serialization
     #[test]
@@ -194,7 +176,6 @@ mod cache_tests {
 }
 
 mod ffi_tests {
-    use super::*;
     use std::ffi::CString;
     use std::ptr;
 

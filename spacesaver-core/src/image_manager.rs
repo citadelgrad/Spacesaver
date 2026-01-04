@@ -5,12 +5,12 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
 
 use crate::api::{ApodResponse, NasaApodApi};
-use crate::cache::{CachedImageMetadata, ImageCache};
+use crate::cache::ImageCache;
 use crate::config::Config;
 use crate::error::{Error, Result};
 
@@ -293,13 +293,16 @@ impl ImageManager {
     pub fn random_image(&self) -> Option<CurrentImage> {
         let state = self.state.read();
 
-        state.cache.get_random_image().map(|(path, metadata)| CurrentImage {
-            path,
-            title: metadata.title.clone(),
-            explanation: metadata.explanation.clone(),
-            date: metadata.date.clone(),
-            copyright: metadata.copyright.clone(),
-        })
+        state
+            .cache
+            .get_random_image()
+            .map(|(path, metadata)| CurrentImage {
+                path,
+                title: metadata.title.clone(),
+                explanation: metadata.explanation.clone(),
+                date: metadata.date.clone(),
+                copyright: metadata.copyright.clone(),
+            })
     }
 
     /// Get current image info
@@ -368,7 +371,7 @@ impl ImageManager {
                             if let Ok(response) = client.get(image_url).send() {
                                 if let Ok(data) = response.bytes() {
                                     let mut s = state.write();
-                                    if let Ok(_) = s.cache.store_image(&apod, &data) {
+                                    if s.cache.store_image(&apod, &data).is_ok() {
                                         s.shuffled_dates.push(apod.date);
                                     }
                                 }
