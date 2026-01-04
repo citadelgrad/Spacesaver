@@ -8,6 +8,7 @@ mod config;
 pub mod error;
 mod ffi;
 mod image_manager;
+pub mod logging;
 
 pub use api::NasaApodApi;
 pub use cache::ImageCache;

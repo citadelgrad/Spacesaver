@@ -12,6 +12,7 @@ use parking_lot::RwLock;
 
 use crate::config::Config;
 use crate::image_manager::ImageManager;
+use crate::logging;
 
 /// Global image manager instance
 static IMAGE_MANAGER: OnceCell<Arc<RwLock<Option<ImageManager>>>> = OnceCell::new();
@@ -97,13 +98,20 @@ fn option_to_c_string(s: Option<&str>) -> *mut c_char {
 /// api_key must be a valid null-terminated string or null
 #[no_mangle]
 pub unsafe extern "C" fn spacesaver_init(api_key: *const c_char) -> SpacesaverResult {
-    // Initialize logging
-    let _ = env_logger::try_init();
+    // Initialize file-based logging (works in screen saver context)
+    logging::init_logging();
+    logging::log_info("spacesaver_init called");
 
     let mut config = match Config::load() {
-        Ok(c) => c,
+        Ok(c) => {
+            logging::log_info(&format!(
+                "Config loaded, API key: {}...",
+                &c.api_key[..8.min(c.api_key.len())]
+            ));
+            c
+        }
         Err(e) => {
-            log::warn!("Failed to load config, using defaults: {}", e);
+            logging::log_warn(&format!("Failed to load config, using defaults: {}", e));
             Config::default()
         }
     };
@@ -119,11 +127,19 @@ pub unsafe extern "C" fn spacesaver_init(api_key: *const c_char) -> SpacesaverRe
 
     match ImageManager::new(config) {
         Ok(manager) => {
+            let cached = manager.cached_count();
+            logging::log_info(&format!(
+                "ImageManager initialized, {} cached images",
+                cached
+            ));
             let mut guard = get_manager().write();
             *guard = Some(manager);
             SpacesaverResult::ok()
         }
-        Err(e) => SpacesaverResult::err(&format!("Failed to initialize: {}", e)),
+        Err(e) => {
+            logging::log_error(&format!("Failed to initialize ImageManager: {}", e));
+            SpacesaverResult::err(&format!("Failed to initialize: {}", e))
+        }
     }
 }
 
@@ -152,16 +168,24 @@ pub extern "C" fn spacesaver_is_fetching() -> bool {
 /// Returns the number of images fetched, or -1 on error
 #[no_mangle]
 pub extern "C" fn spacesaver_fetch_random(count: i32) -> i32 {
+    logging::log_info(&format!(
+        "spacesaver_fetch_random called with count={}",
+        count
+    ));
     let guard = get_manager().read();
     if let Some(manager) = guard.as_ref() {
         match manager.fetch_random_images(count as u32) {
-            Ok(paths) => paths.len() as i32,
+            Ok(paths) => {
+                logging::log_info(&format!("Successfully fetched {} images", paths.len()));
+                paths.len() as i32
+            }
             Err(e) => {
-                log::error!("Failed to fetch images: {}", e);
+                logging::log_error(&format!("Failed to fetch random images: {}", e));
                 -1
             }
         }
     } else {
+        logging::log_error("spacesaver_fetch_random: manager not initialized");
         -1
     }
 }
@@ -170,16 +194,27 @@ pub extern "C" fn spacesaver_fetch_random(count: i32) -> i32 {
 /// Returns the number of images fetched, or -1 on error
 #[no_mangle]
 pub extern "C" fn spacesaver_fetch_recent(days: i32) -> i32 {
+    logging::log_info(&format!(
+        "spacesaver_fetch_recent called with days={}",
+        days
+    ));
     let guard = get_manager().read();
     if let Some(manager) = guard.as_ref() {
         match manager.fetch_recent_images(days as u32) {
-            Ok(paths) => paths.len() as i32,
+            Ok(paths) => {
+                logging::log_info(&format!(
+                    "Successfully fetched {} recent images",
+                    paths.len()
+                ));
+                paths.len() as i32
+            }
             Err(e) => {
-                log::error!("Failed to fetch images: {}", e);
+                logging::log_error(&format!("Failed to fetch recent images: {}", e));
                 -1
             }
         }
     } else {
+        logging::log_error("spacesaver_fetch_recent: manager not initialized");
         -1
     }
 }
@@ -375,4 +410,14 @@ pub unsafe extern "C" fn spacesaver_set_api_key(api_key: *const c_char) -> Space
 #[no_mangle]
 pub extern "C" fn spacesaver_version() -> *mut c_char {
     to_c_string(env!("CARGO_PKG_VERSION"))
+}
+
+/// Get the log file path
+/// Returns a C string that must be freed with spacesaver_free_string
+#[no_mangle]
+pub extern "C" fn spacesaver_get_log_path() -> *mut c_char {
+    match logging::log_file_path() {
+        Some(path) => to_c_string(path.to_string_lossy().as_ref()),
+        None => ptr::null_mut(),
+    }
 }

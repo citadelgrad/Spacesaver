@@ -13,6 +13,7 @@ use crate::api::{ApodResponse, NasaApodApi};
 use crate::cache::ImageCache;
 use crate::config::Config;
 use crate::error::{Error, Result};
+use crate::logging;
 
 /// Current image info for display
 #[derive(Debug, Clone)]
@@ -142,11 +143,25 @@ impl ImageManager {
     }
 
     fn do_fetch_random(&self, count: u32) -> Result<Vec<PathBuf>> {
-        let apods = self.api.fetch_random(count)?;
+        logging::log_info(&format!("Fetching {} random APODs from API", count));
+        let apods = match self.api.fetch_random(count) {
+            Ok(a) => {
+                logging::log_info(&format!("API returned {} APODs", a.len()));
+                a
+            }
+            Err(e) => {
+                logging::log_error(&format!("API fetch_random failed: {}", e));
+                return Err(e);
+            }
+        };
         let mut paths = Vec::new();
 
         for apod in apods {
             if !apod.is_image() {
+                logging::log_debug(&format!(
+                    "Skipping non-image APOD: {} ({})",
+                    apod.date, apod.media_type
+                ));
                 continue;
             }
 
@@ -155,6 +170,7 @@ impl ImageManager {
                 let state = self.state.read();
                 if state.cache.has_image(&apod.date) {
                     if let Some(path) = state.cache.get_image_path(&apod.date) {
+                        logging::log_debug(&format!("Already cached: {}", apod.date));
                         paths.push(path);
                         continue;
                     }
@@ -163,11 +179,16 @@ impl ImageManager {
 
             // Download image
             if let Some(image_url) = apod.best_image_url() {
-                log::info!("Downloading: {} - {}", apod.date, apod.title);
+                logging::log_info(&format!("Downloading: {} - {}", apod.date, apod.title));
 
                 match self.download_and_cache(&apod, image_url) {
-                    Ok(path) => paths.push(path),
-                    Err(e) => log::warn!("Failed to download {}: {}", apod.date, e),
+                    Ok(path) => {
+                        logging::log_info(&format!("Successfully cached: {}", apod.date));
+                        paths.push(path);
+                    }
+                    Err(e) => {
+                        logging::log_warn(&format!("Failed to download {}: {}", apod.date, e))
+                    }
                 }
 
                 // Small delay to be nice to the API
