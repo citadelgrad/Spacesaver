@@ -1,0 +1,247 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Run tests before release
+  test:
+    name: Pre-release Tests
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Run tests
+        working-directory: spacesaver-core
+        run: cargo test --all-features --release
+
+  # Build universal binary and create release
+  release:
+    name: Build and Release
+    runs-on: macos-latest
+    needs: test
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: x86_64-apple-darwin, aarch64-apple-darwin
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            spacesaver-core/target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+
+      - name: Build Rust library (x86_64)
+        working-directory: spacesaver-core
+        run: cargo build --release --target x86_64-apple-darwin
+
+      - name: Build Rust library (arm64)
+        working-directory: spacesaver-core
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Create universal binary
+        run: |
+          mkdir -p build
+          lipo -create \
+            spacesaver-core/target/x86_64-apple-darwin/release/libspacesaver_core.a \
+            spacesaver-core/target/aarch64-apple-darwin/release/libspacesaver_core.a \
+            -output build/libspacesaver_core.a
+
+          echo "Universal binary architectures:"
+          lipo -info build/libspacesaver_core.a
+
+      - name: Generate C header
+        working-directory: spacesaver-core
+        run: |
+          cargo install cbindgen --force
+          mkdir -p include
+          cbindgen --config cbindgen.toml --crate spacesaver-core --output include/spacesaver.h
+          cp include/spacesaver.h ../swift-wrapper/Spacesaver/
+
+      - name: Update version in Info.plist
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          sed -i '' "s/<string>1.0<\/string>/<string>${VERSION}<\/string>/g" swift-wrapper/Spacesaver/Info.plist
+          echo "Updated Info.plist version to ${VERSION}"
+
+      - name: Build Swift wrapper (Universal)
+        run: |
+          SDK_PATH=$(xcrun --show-sdk-path)
+
+          # Try to build universal first
+          swiftc \
+            -emit-library \
+            -emit-module \
+            -module-name Spacesaver \
+            -target arm64-apple-macosx10.15 \
+            -target x86_64-apple-macosx10.15 \
+            -sdk "$SDK_PATH" \
+            -import-objc-header swift-wrapper/Spacesaver/Spacesaver-Bridging-Header.h \
+            -I swift-wrapper/Spacesaver \
+            -L build \
+            -lspacesaver_core \
+            -framework ScreenSaver \
+            -framework AppKit \
+            -framework CoreFoundation \
+            -framework Security \
+            -o build/libSpacesaver.dylib \
+            swift-wrapper/Spacesaver/SpacesaverView.swift \
+            swift-wrapper/Spacesaver/ConfigureSheetController.swift 2>/dev/null || {
+              # Build for each arch separately and combine
+              echo "Building architectures separately..."
+
+              # arm64
+              swiftc \
+                -emit-library \
+                -module-name Spacesaver \
+                -target arm64-apple-macosx10.15 \
+                -sdk "$SDK_PATH" \
+                -import-objc-header swift-wrapper/Spacesaver/Spacesaver-Bridging-Header.h \
+                -I swift-wrapper/Spacesaver \
+                -L build \
+                -lspacesaver_core \
+                -framework ScreenSaver \
+                -framework AppKit \
+                -framework CoreFoundation \
+                -framework Security \
+                -o build/libSpacesaver-arm64.dylib \
+                swift-wrapper/Spacesaver/SpacesaverView.swift \
+                swift-wrapper/Spacesaver/ConfigureSheetController.swift
+
+              # x86_64
+              swiftc \
+                -emit-library \
+                -module-name Spacesaver \
+                -target x86_64-apple-macosx10.15 \
+                -sdk "$SDK_PATH" \
+                -import-objc-header swift-wrapper/Spacesaver/Spacesaver-Bridging-Header.h \
+                -I swift-wrapper/Spacesaver \
+                -L build \
+                -lspacesaver_core \
+                -framework ScreenSaver \
+                -framework AppKit \
+                -framework CoreFoundation \
+                -framework Security \
+                -o build/libSpacesaver-x86_64.dylib \
+                swift-wrapper/Spacesaver/SpacesaverView.swift \
+                swift-wrapper/Spacesaver/ConfigureSheetController.swift
+
+              # Combine into universal
+              lipo -create \
+                build/libSpacesaver-arm64.dylib \
+                build/libSpacesaver-x86_64.dylib \
+                -output build/libSpacesaver.dylib
+            }
+
+          echo "Swift library architectures:"
+          lipo -info build/libSpacesaver.dylib || file build/libSpacesaver.dylib
+
+      - name: Create screen saver bundle
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          BUNDLE_DIR="build/Spacesaver.saver"
+
+          mkdir -p "$BUNDLE_DIR/Contents/MacOS"
+          mkdir -p "$BUNDLE_DIR/Contents/Resources"
+
+          cp swift-wrapper/Spacesaver/Info.plist "$BUNDLE_DIR/Contents/"
+          cp build/libSpacesaver.dylib "$BUNDLE_DIR/Contents/MacOS/Spacesaver"
+
+          # Sign the bundle (ad-hoc for now)
+          codesign --force --deep --sign - "$BUNDLE_DIR" || echo "Code signing skipped"
+
+          echo "Bundle created successfully"
+          find "$BUNDLE_DIR" -type f
+
+      - name: Create release archives
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          cd build
+
+          # Create ZIP
+          zip -r "Spacesaver-${VERSION}.saver.zip" Spacesaver.saver
+          echo "Created Spacesaver-${VERSION}.saver.zip"
+
+          # Create DMG (optional, nicer for users)
+          hdiutil create -volname "Spacesaver ${VERSION}" \
+            -srcfolder Spacesaver.saver \
+            -ov -format UDZO \
+            "Spacesaver-${VERSION}.dmg" || echo "DMG creation skipped"
+
+          ls -la
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+
+          # Get commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [ -n "$LAST_TAG" ]; then
+            CHANGES=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s" --no-merges)
+          else
+            CHANGES=$(git log --pretty=format:"- %s" --no-merges -10)
+          fi
+
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          echo "## What's Changed" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "## Installation" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "1. Download \`Spacesaver-${VERSION}.saver.zip\` or \`Spacesaver-${VERSION}.dmg\`" >> $GITHUB_OUTPUT
+          echo "2. Unzip/mount and double-click \`Spacesaver.saver\` to install" >> $GITHUB_OUTPUT
+          echo "3. Open System Preferences > Screen Saver and select \"Spacesaver\"" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "## Requirements" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "- macOS 10.15 (Catalina) or later" >> $GITHUB_OUTPUT
+          echo "- Intel or Apple Silicon Mac (Universal Binary)" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Spacesaver v${{ steps.version.outputs.VERSION }}
+          body: ${{ steps.changelog.outputs.CHANGELOG }}
+          draft: false
+          prerelease: ${{ contains(github.ref, '-beta') || contains(github.ref, '-alpha') || contains(github.ref, '-rc') }}
+          files: |
+            build/Spacesaver-${{ steps.version.outputs.VERSION }}.saver.zip
+            build/Spacesaver-${{ steps.version.outputs.VERSION }}.dmg
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.version.outputs.VERSION }}
+          path: |
+            build/Spacesaver-${{ steps.version.outputs.VERSION }}.saver.zip
+            build/Spacesaver-${{ steps.version.outputs.VERSION }}.dmg
+          retention-days: 90

@@ -2,10 +2,10 @@
 //!
 //! Rust library for fetching and managing NASA APOD images for the macOS screen saver.
 
-mod api;
-mod cache;
+pub mod api;
+pub mod cache;
 mod config;
-mod error;
+pub mod error;
 mod ffi;
 mod image_manager;
 

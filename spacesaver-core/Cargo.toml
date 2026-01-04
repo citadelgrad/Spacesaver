@@ -7,7 +7,7 @@ license = "MIT"
 
 [lib]
 name = "spacesaver_core"
-crate-type = ["staticlib", "cdylib"]
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
 reqwest = { version = "0.11", features = ["blocking", "json"] }
@@ -23,6 +23,9 @@ env_logger = "0.10"
 thiserror = "1.0"
 parking_lot = "0.12"
 once_cell = "1.18"
+
+[dev-dependencies]
+tempfile = "3.10"
 
 [build-dependencies]
 cbindgen = "0.26"

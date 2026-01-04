@@ -1,0 +1,292 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Run Rust tests
+  test:
+    name: Test Rust Core
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            spacesaver-core/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        working-directory: spacesaver-core
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        working-directory: spacesaver-core
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        working-directory: spacesaver-core
+        run: cargo test --all-features --verbose
+
+      - name: Run tests with release optimizations
+        working-directory: spacesaver-core
+        run: cargo test --release --all-features
+
+  # Build for Intel Macs
+  build-x86:
+    name: Build (Intel)
+    runs-on: macos-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            spacesaver-core/target
+          key: ${{ runner.os }}-cargo-x86-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-x86-
+
+      - name: Build Rust library (x86_64)
+        working-directory: spacesaver-core
+        run: cargo build --release --target x86_64-apple-darwin
+
+      - name: Verify library was built
+        run: |
+          ls -la spacesaver-core/target/x86_64-apple-darwin/release/
+          file spacesaver-core/target/x86_64-apple-darwin/release/libspacesaver_core.a
+
+      - name: Upload x86_64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libspacesaver-x86_64
+          path: spacesaver-core/target/x86_64-apple-darwin/release/libspacesaver_core.a
+          retention-days: 7
+
+  # Build for Apple Silicon Macs
+  build-arm64:
+    name: Build (Apple Silicon)
+    runs-on: macos-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            spacesaver-core/target
+          key: ${{ runner.os }}-cargo-arm64-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-arm64-
+
+      - name: Build Rust library (arm64)
+        working-directory: spacesaver-core
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Verify library was built
+        run: |
+          ls -la spacesaver-core/target/aarch64-apple-darwin/release/
+          file spacesaver-core/target/aarch64-apple-darwin/release/libspacesaver_core.a
+
+      - name: Upload arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libspacesaver-arm64
+          path: spacesaver-core/target/aarch64-apple-darwin/release/libspacesaver_core.a
+          retention-days: 7
+
+  # Build the complete screen saver bundle
+  build-saver:
+    name: Build Screen Saver Bundle
+    runs-on: macos-latest
+    needs: [build-x86, build-arm64]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download x86_64 library
+        uses: actions/download-artifact@v4
+        with:
+          name: libspacesaver-x86_64
+          path: build/x86_64
+
+      - name: Download arm64 library
+        uses: actions/download-artifact@v4
+        with:
+          name: libspacesaver-arm64
+          path: build/arm64
+
+      - name: Create universal binary
+        run: |
+          mkdir -p build/universal
+          lipo -create \
+            build/x86_64/libspacesaver_core.a \
+            build/arm64/libspacesaver_core.a \
+            -output build/universal/libspacesaver_core.a
+
+          echo "Universal binary info:"
+          lipo -info build/universal/libspacesaver_core.a
+
+      - name: Install Rust (for cbindgen header)
+        uses: dtolnay/rust-action@stable
+
+      - name: Generate C header
+        working-directory: spacesaver-core
+        run: |
+          cargo install cbindgen --force
+          mkdir -p include
+          cbindgen --config cbindgen.toml --crate spacesaver-core --output include/spacesaver.h
+          cp include/spacesaver.h ../swift-wrapper/Spacesaver/
+
+      - name: Build Swift wrapper
+        run: |
+          SDK_PATH=$(xcrun --show-sdk-path)
+          ARCH=$(uname -m)
+
+          # Build for both architectures
+          swiftc \
+            -emit-library \
+            -emit-module \
+            -module-name Spacesaver \
+            -target arm64-apple-macosx10.15 \
+            -target x86_64-apple-macosx10.15 \
+            -sdk "$SDK_PATH" \
+            -import-objc-header swift-wrapper/Spacesaver/Spacesaver-Bridging-Header.h \
+            -I swift-wrapper/Spacesaver \
+            -L build/universal \
+            -lspacesaver_core \
+            -framework ScreenSaver \
+            -framework AppKit \
+            -framework CoreFoundation \
+            -framework Security \
+            -o build/libSpacesaver.dylib \
+            swift-wrapper/Spacesaver/SpacesaverView.swift \
+            swift-wrapper/Spacesaver/ConfigureSheetController.swift || {
+              # Fallback: build for current arch only
+              echo "Multi-arch build failed, building for current architecture..."
+              swiftc \
+                -emit-library \
+                -emit-module \
+                -module-name Spacesaver \
+                -target ${ARCH}-apple-macosx10.15 \
+                -sdk "$SDK_PATH" \
+                -import-objc-header swift-wrapper/Spacesaver/Spacesaver-Bridging-Header.h \
+                -I swift-wrapper/Spacesaver \
+                -L build/universal \
+                -lspacesaver_core \
+                -framework ScreenSaver \
+                -framework AppKit \
+                -framework CoreFoundation \
+                -framework Security \
+                -o build/libSpacesaver.dylib \
+                swift-wrapper/Spacesaver/SpacesaverView.swift \
+                swift-wrapper/Spacesaver/ConfigureSheetController.swift
+            }
+
+      - name: Create screen saver bundle
+        run: |
+          BUNDLE_DIR="build/Spacesaver.saver"
+
+          mkdir -p "$BUNDLE_DIR/Contents/MacOS"
+          mkdir -p "$BUNDLE_DIR/Contents/Resources"
+          mkdir -p "$BUNDLE_DIR/Contents/Frameworks"
+
+          cp swift-wrapper/Spacesaver/Info.plist "$BUNDLE_DIR/Contents/"
+          cp build/libSpacesaver.dylib "$BUNDLE_DIR/Contents/MacOS/Spacesaver"
+
+          echo "Bundle structure:"
+          find "$BUNDLE_DIR" -type f
+
+      - name: Create ZIP archive
+        run: |
+          cd build
+          zip -r Spacesaver.saver.zip Spacesaver.saver
+
+          echo "Archive created:"
+          ls -la Spacesaver.saver.zip
+
+      - name: Upload screen saver bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Spacesaver.saver
+          path: build/Spacesaver.saver.zip
+          retention-days: 30
+
+  # Integration tests (verify the bundle structure)
+  integration-test:
+    name: Integration Tests
+    runs-on: macos-latest
+    needs: build-saver
+    steps:
+      - name: Download screen saver bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: Spacesaver.saver
+          path: .
+
+      - name: Extract and verify bundle
+        run: |
+          unzip Spacesaver.saver.zip
+
+          echo "=== Verifying bundle structure ==="
+
+          # Check required files exist
+          test -f "Spacesaver.saver/Contents/Info.plist" || { echo "Missing Info.plist"; exit 1; }
+          test -f "Spacesaver.saver/Contents/MacOS/Spacesaver" || { echo "Missing executable"; exit 1; }
+
+          echo "✓ Bundle structure is valid"
+
+          # Check Info.plist contents
+          echo "=== Info.plist contents ==="
+          cat "Spacesaver.saver/Contents/Info.plist"
+
+          # Verify principal class is set
+          if ! grep -q "NSPrincipalClass" "Spacesaver.saver/Contents/Info.plist"; then
+            echo "Missing NSPrincipalClass in Info.plist"
+            exit 1
+          fi
+          echo "✓ NSPrincipalClass is set"
+
+          # Check executable
+          echo "=== Executable info ==="
+          file "Spacesaver.saver/Contents/MacOS/Spacesaver"
+
+          echo "=== All integration tests passed ==="
