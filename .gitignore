@@ -1,0 +1,42 @@
+# Build artifacts
+/build/
+/target/
+
+# Rust
+spacesaver-core/target/
+**/*.rs.bk
+Cargo.lock
+
+# Generated files
+spacesaver-core/include/spacesaver.h
+swift-wrapper/Spacesaver/spacesaver.h
+
+# macOS
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xccheckout
+*.moved-aside
+
+# IDE
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Screen saver bundles (built)
+*.saver/
+
+# Cache and config (for development)
+.spacesaver-cache/

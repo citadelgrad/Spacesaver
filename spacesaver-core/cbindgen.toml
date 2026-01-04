@@ -1,0 +1,45 @@
+# cbindgen configuration for generating C headers
+
+language = "C"
+
+# Header configuration
+header = """
+/*
+ * Spacesaver - NASA APOD Screen Saver
+ *
+ * This header provides the C FFI for the Spacesaver Rust library.
+ * Use these functions from Swift/Objective-C to control the screen saver.
+ */
+"""
+
+include_guard = "SPACESAVER_H"
+
+# Style configuration
+style = "both"
+cpp_compat = true
+
+# Documentation
+documentation = true
+documentation_style = "c99"
+
+# Export configuration
+[export]
+include = [
+    "SpacesaverImage",
+    "SpacesaverResult",
+]
+
+[export.rename]
+
+# Function configuration
+[fn]
+prefix = ""
+args = "auto"
+
+# Struct configuration
+[struct]
+rename_fields = "None"
+
+# Enum configuration
+[enum]
+rename_variants = "None"
