@@ -156,6 +156,18 @@ class SpacesaverView: ScreenSaverView {
     // MARK: - Rust Library Integration
 
     private func initializeRustLibrary() {
+        // Set bundle resources path for fallback images
+        if let resourcePath = Bundle(for: SpacesaverView.self).resourcePath {
+            NSLog("Spacesaver: Setting bundle path to: \(resourcePath)")
+            let bundleResult = spacesaver_set_bundle_path(resourcePath)
+            if !bundleResult.success {
+                if let errorPtr = bundleResult.error {
+                    NSLog("Spacesaver: Failed to set bundle path: \(String(cString: errorPtr))")
+                    spacesaver_free_string(errorPtr)
+                }
+            }
+        }
+
         let result = spacesaver_init(nil)
         if result.success {
             isInitialized = true
@@ -166,8 +178,15 @@ class SpacesaverView: ScreenSaverView {
                 // Load first image
                 loadNextImage()
             } else {
-                // Start fetching images
-                showLoading(true)
+                // Try loading bundled images first as immediate fallback
+                let bundledCount = spacesaver_load_bundled_images()
+                if bundledCount > 0 {
+                    NSLog("Spacesaver: Loaded \(bundledCount) bundled images")
+                    loadNextImage()
+                    startTransitionTimer()
+                }
+                // Also fetch from network in background
+                showLoading(bundledCount <= 0)
                 fetchImagesInBackground()
             }
         } else {
@@ -193,7 +212,16 @@ class SpacesaverView: ScreenSaverView {
                     self?.loadNextImage()
                     self?.startTransitionTimer()
                 } else {
-                    NSLog("Spacesaver: Failed to fetch images, will retry on next animation start")
+                    // Network fetch failed, try bundled images as fallback
+                    NSLog("Spacesaver: Network fetch failed, trying bundled images")
+                    let bundledCount = spacesaver_load_bundled_images()
+                    if bundledCount > 0 {
+                        NSLog("Spacesaver: Loaded \(bundledCount) bundled images as fallback")
+                        self?.loadNextImage()
+                        self?.startTransitionTimer()
+                    } else {
+                        NSLog("Spacesaver: Failed to fetch images and no bundled images available")
+                    }
                 }
             }
         }

@@ -100,6 +100,7 @@ SWIFT_FLAGS=(
     -framework AppKit
     -framework CoreFoundation
     -framework Security
+    -framework SystemConfiguration
     -o "$BUILD_DIR/libSpacesaver.dylib"
 )
 
@@ -120,6 +121,15 @@ mkdir -p "$RESOURCES_DIR"
 
 # Copy Info.plist
 cp "$SWIFT_DIR/Info.plist" "$CONTENTS_DIR/"
+
+# Copy bundled images to Resources
+BUNDLED_IMAGES_DIR="$PROJECT_ROOT/resources/bundled-images"
+if [[ -d "$BUNDLED_IMAGES_DIR" ]]; then
+    echo -e "${GREEN}Copying bundled images to Resources...${NC}"
+    mkdir -p "$RESOURCES_DIR/BundledImages"
+    cp "$BUNDLED_IMAGES_DIR"/*.jpg "$RESOURCES_DIR/BundledImages/"
+    cp "$BUNDLED_IMAGES_DIR/metadata.json" "$RESOURCES_DIR/BundledImages/"
+fi
 
 # Create the main executable by linking everything
 echo -e "${GREEN}Linking final executable...${NC}"

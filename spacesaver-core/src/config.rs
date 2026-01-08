@@ -11,11 +11,11 @@ use crate::error::{Error, Result};
 #[serde(rename_all = "snake_case")]
 pub enum ImageSource {
     /// NASA Astronomy Picture of the Day (requires API key)
-    #[default]
     Apod,
     /// NASA Image and Video Library (no API key required)
     NasaImages,
     /// Try APOD first, fall back to NASA Images if unavailable
+    #[default]
     ApodWithFallback,
 }
 

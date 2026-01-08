@@ -472,4 +472,25 @@ impl ImageManager {
         state.current_index = 0;
         Ok(())
     }
+
+    /// Store a bundled image directly into the cache
+    /// Used for loading pre-bundled fallback images
+    pub fn store_bundled_image(&self, apod: &ApodResponse, data: &[u8]) -> Result<PathBuf> {
+        let mut state = self.state.write();
+
+        // Check if already exists
+        if state.cache.has_image(&apod.date) {
+            if let Some(path) = state.cache.get_image_path(&apod.date) {
+                return Ok(path);
+            }
+        }
+
+        let path = state.cache.store_image(apod, data)?;
+
+        if !state.shuffled_dates.contains(&apod.date) {
+            state.shuffled_dates.push(apod.date.clone());
+        }
+
+        Ok(path)
+    }
 }

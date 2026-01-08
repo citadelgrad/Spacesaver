@@ -17,8 +17,15 @@ use crate::logging;
 /// Global image manager instance
 static IMAGE_MANAGER: OnceCell<Arc<RwLock<Option<ImageManager>>>> = OnceCell::new();
 
+/// Bundle resources path for fallback images
+static BUNDLE_RESOURCES_PATH: OnceCell<RwLock<Option<std::path::PathBuf>>> = OnceCell::new();
+
 fn get_manager() -> &'static Arc<RwLock<Option<ImageManager>>> {
     IMAGE_MANAGER.get_or_init(|| Arc::new(RwLock::new(None)))
+}
+
+fn get_bundle_path() -> &'static RwLock<Option<std::path::PathBuf>> {
+    BUNDLE_RESOURCES_PATH.get_or_init(|| RwLock::new(None))
 }
 
 /// Image information returned to Swift
@@ -410,6 +417,123 @@ pub unsafe extern "C" fn spacesaver_set_api_key(api_key: *const c_char) -> Space
 #[no_mangle]
 pub extern "C" fn spacesaver_version() -> *mut c_char {
     to_c_string(env!("CARGO_PKG_VERSION"))
+}
+
+/// Set the bundle resources path for bundled fallback images
+///
+/// # Safety
+/// path must be a valid null-terminated string
+#[no_mangle]
+pub unsafe extern "C" fn spacesaver_set_bundle_path(path: *const c_char) -> SpacesaverResult {
+    if path.is_null() {
+        return SpacesaverResult::err("Bundle path is null");
+    }
+
+    let path_str = match CStr::from_ptr(path).to_str() {
+        Ok(s) => s,
+        Err(_) => return SpacesaverResult::err("Invalid UTF-8 in bundle path"),
+    };
+
+    let path_buf = std::path::PathBuf::from(path_str);
+    logging::log_info(&format!("Bundle resources path set to: {:?}", path_buf));
+
+    let mut guard = get_bundle_path().write();
+    *guard = Some(path_buf);
+
+    SpacesaverResult::ok()
+}
+
+/// Load bundled fallback images into the cache
+/// Returns the number of images loaded, or -1 on error
+#[no_mangle]
+pub extern "C" fn spacesaver_load_bundled_images() -> i32 {
+    let bundle_path = {
+        let guard = get_bundle_path().read();
+        match guard.as_ref() {
+            Some(p) => p.clone(),
+            None => {
+                logging::log_warn("No bundle path set, cannot load bundled images");
+                return -1;
+            }
+        }
+    };
+
+    let bundled_images_dir = bundle_path.join("BundledImages");
+    let metadata_path = bundled_images_dir.join("metadata.json");
+
+    if !metadata_path.exists() {
+        logging::log_warn(&format!("Bundled images metadata not found at {:?}", metadata_path));
+        return -1;
+    }
+
+    // Read metadata
+    let metadata_content = match std::fs::read_to_string(&metadata_path) {
+        Ok(c) => c,
+        Err(e) => {
+            logging::log_error(&format!("Failed to read bundled metadata: {}", e));
+            return -1;
+        }
+    };
+
+    #[derive(serde::Deserialize)]
+    struct BundledImage {
+        filename: String,
+        title: String,
+        date: String,
+        copyright: Option<String>,
+    }
+
+    let images: Vec<BundledImage> = match serde_json::from_str(&metadata_content) {
+        Ok(i) => i,
+        Err(e) => {
+            logging::log_error(&format!("Failed to parse bundled metadata: {}", e));
+            return -1;
+        }
+    };
+
+    let guard = get_manager().read();
+    let manager = match guard.as_ref() {
+        Some(m) => m,
+        None => {
+            logging::log_error("Manager not initialized, cannot load bundled images");
+            return -1;
+        }
+    };
+
+    let mut loaded = 0;
+    for img in images {
+        let image_path = bundled_images_dir.join(&img.filename);
+        if image_path.exists() {
+            match std::fs::read(&image_path) {
+                Ok(data) => {
+                    let apod = crate::api::ApodResponse {
+                        date: img.date.clone(),
+                        title: img.title.clone(),
+                        explanation: format!("NASA Image: {}", img.title),
+                        media_type: "image".to_string(),
+                        url: String::new(),
+                        hdurl: None,
+                        copyright: img.copyright,
+                        service_version: None,
+                        thumbnail_url: None,
+                    };
+
+                    if manager.store_bundled_image(&apod, &data).is_ok() {
+                        logging::log_info(&format!("Loaded bundled image: {}", img.title));
+                        loaded += 1;
+                    }
+                }
+                Err(e) => {
+                    logging::log_warn(&format!("Failed to read bundled image {}: {}", img.filename, e));
+                }
+            }
+        } else {
+            logging::log_warn(&format!("Bundled image not found: {:?}", image_path));
+        }
+    }
+
+    logging::log_info(&format!("Loaded {} bundled images as fallback", loaded));
+    loaded
 }
 
 /// Get the log file path
