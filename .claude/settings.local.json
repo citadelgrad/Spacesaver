@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo fmt:*)",
+      "Bash(/opt/homebrew/bin/cargo fmt --all)",
+      "Bash(/opt/homebrew/bin/cargo fmt --all -- --check)",
+      "Bash(/opt/homebrew/bin/cargo clippy --all-targets --all-features -- -D warnings)",
+      "Bash(/opt/homebrew/bin/cargo test --all-features --verbose)",
+      "Bash(/opt/homebrew/bin/cargo test --all-features)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(log show:*)",
+      "Bash(log stream:*)",
+      "Bash(cat:*)",
+      "Bash(curl:*)",
+      "Bash(cbindgen:*)",
+      "Bash(cargo install:*)",
+      "Bash(~/.cargo/bin/cbindgen:*)",
+      "Bash(/opt/homebrew/bin/cargo build:*)",
+      "Bash(otool:*)",
+      "Bash(nm:*)",
+      "Bash(ls:*)",
+      "Bash(install_name_tool:*)",
+      "Bash(defaults read:*)",
+      "WebSearch",
+      "WebFetch(domain:api.nasa.gov)",
+      "WebFetch(domain:jwstapi.com)",
+      "WebFetch(domain:unsplash.com)",
+      "WebFetch(domain:images-api.nasa.gov)",
+      "WebFetch(domain:www.pexels.com)",
+      "WebFetch(domain:pixabay.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:epic.gsfc.nasa.gov)"
+    ]
+  }
+}

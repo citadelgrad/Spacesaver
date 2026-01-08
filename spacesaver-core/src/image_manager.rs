@@ -11,9 +11,10 @@ use rand::seq::SliceRandom;
 
 use crate::api::{ApodResponse, NasaApodApi};
 use crate::cache::ImageCache;
-use crate::config::Config;
+use crate::config::{Config, ImageSource};
 use crate::error::{Error, Result};
 use crate::logging;
+use crate::nasa_images::NasaImagesApi;
 
 /// Current image info for display
 #[derive(Debug, Clone)]
@@ -33,9 +34,11 @@ struct ManagerState {
     is_fetching: bool,
 }
 
-/// Manages NASA APOD images - fetching, caching, and serving
+/// Manages NASA space images - fetching, caching, and serving
+/// Supports multiple image sources with fallback
 pub struct ImageManager {
-    api: NasaApodApi,
+    apod_api: NasaApodApi,
+    images_api: NasaImagesApi,
     config: Config,
     state: Arc<RwLock<ManagerState>>,
 }
@@ -43,7 +46,8 @@ pub struct ImageManager {
 impl ImageManager {
     /// Create a new image manager
     pub fn new(config: Config) -> Result<Self> {
-        let api = NasaApodApi::new(&config.api_key);
+        let apod_api = NasaApodApi::new(&config.api_key);
+        let images_api = NasaImagesApi::new();
         let cache = ImageCache::new(config.cache_size)?;
 
         // Get shuffled list of cached dates
@@ -60,8 +64,14 @@ impl ImageManager {
             is_fetching: false,
         };
 
+        logging::log_info(&format!(
+            "ImageManager initialized with source: {:?}",
+            config.image_source
+        ));
+
         Ok(Self {
-            api,
+            apod_api,
+            images_api,
             config,
             state: Arc::new(RwLock::new(state)),
         })
@@ -77,7 +87,7 @@ impl ImageManager {
         self.state.read().is_fetching
     }
 
-    /// Fetch and cache a single image by date
+    /// Fetch and cache a single image by date (APOD only)
     pub fn fetch_image(&self, date: NaiveDate) -> Result<PathBuf> {
         let date_str = date.format("%Y-%m-%d").to_string();
 
@@ -91,8 +101,8 @@ impl ImageManager {
             }
         }
 
-        // Fetch from API
-        let apod = self.api.fetch_by_date(date)?;
+        // Fetch from APOD API
+        let apod = self.apod_api.fetch_by_date(date)?;
 
         // Only process images, skip videos
         if !apod.is_image() {
@@ -143,23 +153,83 @@ impl ImageManager {
     }
 
     fn do_fetch_random(&self, count: u32) -> Result<Vec<PathBuf>> {
-        logging::log_info(&format!("Fetching {} random APODs from API", count));
-        let apods = match self.api.fetch_random(count) {
+        match self.config.image_source {
+            ImageSource::Apod => self.fetch_from_apod(count),
+            ImageSource::NasaImages => self.fetch_from_nasa_images(count),
+            ImageSource::ApodWithFallback => {
+                logging::log_info("Trying APOD first, will fall back to NASA Images if needed");
+
+                match self.fetch_from_apod(count) {
+                    Ok(paths) if !paths.is_empty() => {
+                        logging::log_info(&format!(
+                            "APOD fetch successful, got {} images",
+                            paths.len()
+                        ));
+                        Ok(paths)
+                    }
+                    Ok(_) => {
+                        logging::log_warn("APOD returned no images, falling back to NASA Images");
+                        self.fetch_from_nasa_images(count)
+                    }
+                    Err(e) => {
+                        logging::log_warn(&format!(
+                            "APOD fetch failed: {}, falling back to NASA Images",
+                            e
+                        ));
+                        self.fetch_from_nasa_images(count)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Fetch images from NASA APOD API
+    fn fetch_from_apod(&self, count: u32) -> Result<Vec<PathBuf>> {
+        logging::log_info(&format!("Fetching {} random images from APOD API", count));
+
+        let apods = match self.apod_api.fetch_random(count) {
             Ok(a) => {
-                logging::log_info(&format!("API returned {} APODs", a.len()));
+                logging::log_info(&format!("APOD API returned {} images", a.len()));
                 a
             }
             Err(e) => {
-                logging::log_error(&format!("API fetch_random failed: {}", e));
+                logging::log_error(&format!("APOD API fetch_random failed: {}", e));
                 return Err(e);
             }
         };
+
+        self.process_and_cache_apods(apods)
+    }
+
+    /// Fetch images from NASA Image Library API
+    fn fetch_from_nasa_images(&self, count: u32) -> Result<Vec<PathBuf>> {
+        logging::log_info(&format!(
+            "Fetching {} images from NASA Image Library",
+            count
+        ));
+
+        let apods = match self.images_api.fetch_random_as_apod(count) {
+            Ok(a) => {
+                logging::log_info(&format!("NASA Images API returned {} images", a.len()));
+                a
+            }
+            Err(e) => {
+                logging::log_error(&format!("NASA Images API fetch failed: {}", e));
+                return Err(e);
+            }
+        };
+
+        self.process_and_cache_apods(apods)
+    }
+
+    /// Process a list of ApodResponse objects and cache them
+    fn process_and_cache_apods(&self, apods: Vec<ApodResponse>) -> Result<Vec<PathBuf>> {
         let mut paths = Vec::new();
 
         for apod in apods {
             if !apod.is_image() {
                 logging::log_debug(&format!(
-                    "Skipping non-image APOD: {} ({})",
+                    "Skipping non-image: {} ({})",
                     apod.date, apod.media_type
                 ));
                 continue;
@@ -217,38 +287,8 @@ impl ImageManager {
     }
 
     fn do_fetch_recent(&self, days: u32) -> Result<Vec<PathBuf>> {
-        let apods = self.api.fetch_recent(days)?;
-        let mut paths = Vec::new();
-
-        for apod in apods {
-            if !apod.is_image() {
-                continue;
-            }
-
-            // Check if already cached
-            {
-                let state = self.state.read();
-                if state.cache.has_image(&apod.date) {
-                    if let Some(path) = state.cache.get_image_path(&apod.date) {
-                        paths.push(path);
-                        continue;
-                    }
-                }
-            }
-
-            // Download image
-            if let Some(image_url) = apod.best_image_url() {
-                log::info!("Downloading: {} - {}", apod.date, apod.title);
-
-                match self.download_and_cache(&apod, image_url) {
-                    Ok(path) => paths.push(path),
-                    Err(e) => log::warn!("Failed to download {}: {}", apod.date, e),
-                }
-
-                // Small delay to be nice to the API
-                thread::sleep(Duration::from_millis(100));
-            }
-        }
+        let apods = self.apod_api.fetch_recent(days)?;
+        let paths = self.process_and_cache_apods(apods)?;
 
         // Reshuffle dates
         self.reshuffle_dates();
@@ -356,9 +396,11 @@ impl ImageManager {
     pub fn start_prefetch(&self, count: u32) {
         let state = Arc::clone(&self.state);
         let api_key = self.config.api_key.clone();
+        let image_source = self.config.image_source;
 
         thread::spawn(move || {
-            let api = NasaApodApi::new(&api_key);
+            let apod_api = NasaApodApi::new(&api_key);
+            let images_api = NasaImagesApi::new();
 
             // Mark as fetching
             {
@@ -369,8 +411,17 @@ impl ImageManager {
                 s.is_fetching = true;
             }
 
-            // Fetch random images
-            match api.fetch_random(count) {
+            // Fetch images based on configured source
+            let apods_result = match image_source {
+                ImageSource::Apod => apod_api.fetch_random(count),
+                ImageSource::NasaImages => images_api.fetch_random_as_apod(count),
+                ImageSource::ApodWithFallback => apod_api.fetch_random(count).or_else(|e| {
+                    log::warn!("APOD prefetch failed: {}, trying NASA Images", e);
+                    images_api.fetch_random_as_apod(count)
+                }),
+            };
+
+            match apods_result {
                 Ok(apods) => {
                     for apod in apods {
                         if !apod.is_image() {

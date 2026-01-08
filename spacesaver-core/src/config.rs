@@ -6,6 +6,30 @@ use std::path::PathBuf;
 
 use crate::error::{Error, Result};
 
+/// Image source options
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageSource {
+    /// NASA Astronomy Picture of the Day (requires API key)
+    #[default]
+    Apod,
+    /// NASA Image and Video Library (no API key required)
+    NasaImages,
+    /// Try APOD first, fall back to NASA Images if unavailable
+    ApodWithFallback,
+}
+
+impl ImageSource {
+    /// Get a human-readable name for the source
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            ImageSource::Apod => "NASA APOD",
+            ImageSource::NasaImages => "NASA Image Library",
+            ImageSource::ApodWithFallback => "APOD with Fallback",
+        }
+    }
+}
+
 /// Screen saver configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -32,6 +56,10 @@ pub struct Config {
 
     /// Whether to prefetch images in background
     pub prefetch_enabled: bool,
+
+    /// Image source to use
+    #[serde(default)]
+    pub image_source: ImageSource,
 }
 
 impl Default for Config {
@@ -45,6 +73,7 @@ impl Default for Config {
             transition_duration: 2.0,
             max_history_days: 365,
             prefetch_enabled: true,
+            image_source: ImageSource::ApodWithFallback,
         }
     }
 }
