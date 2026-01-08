@@ -176,52 +176,64 @@ jobs:
           cbindgen --config cbindgen.toml --crate spacesaver-core --output include/spacesaver.h
           cp include/spacesaver.h ../swift-wrapper/Spacesaver/
 
-      - name: Build Swift wrapper
+      - name: Build Swift wrapper (universal)
         run: |
           SDK_PATH=$(xcrun --show-sdk-path)
-          ARCH=$(uname -m)
 
-          # Build for both architectures
+          # Build for arm64
+          echo "Building Swift wrapper for arm64..."
           swiftc \
             -emit-library \
             -emit-module \
             -module-name Spacesaver \
             -target arm64-apple-macosx10.15 \
-            -target x86_64-apple-macosx10.15 \
             -sdk "$SDK_PATH" \
             -import-objc-header swift-wrapper/Spacesaver/Spacesaver-Bridging-Header.h \
             -I swift-wrapper/Spacesaver \
-            -L build/universal \
+            -L build/arm64 \
             -lspacesaver_core \
             -framework ScreenSaver \
             -framework AppKit \
             -framework CoreFoundation \
             -framework Security \
             -framework SystemConfiguration \
-            -o build/libSpacesaver.dylib \
+            -Xlinker -install_name -Xlinker @loader_path/Spacesaver \
+            -o build/libSpacesaver-arm64.dylib \
             swift-wrapper/Spacesaver/SpacesaverView.swift \
-            swift-wrapper/Spacesaver/ConfigureSheetController.swift || {
-              # Fallback: build for current arch only
-              echo "Multi-arch build failed, building for current architecture..."
-              swiftc \
-                -emit-library \
-                -emit-module \
-                -module-name Spacesaver \
-                -target ${ARCH}-apple-macosx10.15 \
-                -sdk "$SDK_PATH" \
-                -import-objc-header swift-wrapper/Spacesaver/Spacesaver-Bridging-Header.h \
-                -I swift-wrapper/Spacesaver \
-                -L build/universal \
-                -lspacesaver_core \
-                -framework ScreenSaver \
-                -framework AppKit \
-                -framework CoreFoundation \
-                -framework Security \
-                -framework SystemConfiguration \
-                -o build/libSpacesaver.dylib \
-                swift-wrapper/Spacesaver/SpacesaverView.swift \
-                swift-wrapper/Spacesaver/ConfigureSheetController.swift
-            }
+            swift-wrapper/Spacesaver/ConfigureSheetController.swift
+
+          # Build for x86_64
+          echo "Building Swift wrapper for x86_64..."
+          swiftc \
+            -emit-library \
+            -emit-module \
+            -module-name Spacesaver \
+            -target x86_64-apple-macosx10.15 \
+            -sdk "$SDK_PATH" \
+            -import-objc-header swift-wrapper/Spacesaver/Spacesaver-Bridging-Header.h \
+            -I swift-wrapper/Spacesaver \
+            -L build/x86_64 \
+            -lspacesaver_core \
+            -framework ScreenSaver \
+            -framework AppKit \
+            -framework CoreFoundation \
+            -framework Security \
+            -framework SystemConfiguration \
+            -Xlinker -install_name -Xlinker @loader_path/Spacesaver \
+            -o build/libSpacesaver-x86_64.dylib \
+            swift-wrapper/Spacesaver/SpacesaverView.swift \
+            swift-wrapper/Spacesaver/ConfigureSheetController.swift
+
+          # Create universal binary with lipo
+          echo "Creating universal binary..."
+          lipo -create \
+            build/libSpacesaver-arm64.dylib \
+            build/libSpacesaver-x86_64.dylib \
+            -output build/libSpacesaver.dylib
+
+          echo "Universal Swift wrapper info:"
+          lipo -info build/libSpacesaver.dylib
+          file build/libSpacesaver.dylib
 
       - name: Create screen saver bundle
         run: |
@@ -287,8 +299,26 @@ jobs:
           fi
           echo "✓ NSPrincipalClass is set"
 
-          # Check executable
-          echo "=== Executable info ==="
+          # Check executable is universal binary
+          echo "=== Executable architecture info ==="
           file "Spacesaver.saver/Contents/MacOS/Spacesaver"
+          lipo -info "Spacesaver.saver/Contents/MacOS/Spacesaver"
+
+          # Verify both architectures are present
+          ARCHS=$(lipo -info "Spacesaver.saver/Contents/MacOS/Spacesaver")
+          if [[ "$ARCHS" != *"x86_64"* ]] || [[ "$ARCHS" != *"arm64"* ]]; then
+            echo "ERROR: Binary is not universal (missing x86_64 or arm64)"
+            echo "Architectures found: $ARCHS"
+            exit 1
+          fi
+          echo "✓ Universal binary contains both x86_64 and arm64"
+
+          # Verify OBJC class is exported
+          echo "=== Checking for SpacesaverView class ==="
+          if nm -g "Spacesaver.saver/Contents/MacOS/Spacesaver" 2>/dev/null | grep -q "OBJC_CLASS.*SpacesaverView"; then
+            echo "✓ SpacesaverView class is exported"
+          else
+            echo "WARNING: SpacesaverView class may not be exported as OBJC class"
+          fi
 
           echo "=== All integration tests passed ==="

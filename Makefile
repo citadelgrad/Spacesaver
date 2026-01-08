@@ -66,6 +66,8 @@ swift-build: rust-build
 		-framework AppKit \
 		-framework CoreFoundation \
 		-framework Security \
+		-framework SystemConfiguration \
+		-Xlinker -install_name -Xlinker @loader_path/Spacesaver \
 		-o $(BUILD_DIR)/libSpacesaver.dylib \
 		$(SWIFT_DIR)/SpacesaverView.swift \
 		$(SWIFT_DIR)/ConfigureSheetController.swift

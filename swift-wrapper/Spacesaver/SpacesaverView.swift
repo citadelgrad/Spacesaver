@@ -8,6 +8,7 @@
 import ScreenSaver
 import AppKit
 
+@objc(SpacesaverView)
 class SpacesaverView: ScreenSaverView {
 
     // MARK: - Properties
@@ -32,6 +33,7 @@ class SpacesaverView: ScreenSaverView {
     // MARK: - Initialization
 
     override init?(frame: NSRect, isPreview: Bool) {
+        NSLog("Spacesaver: init(frame:isPreview:) called, preview=\(isPreview)")
         super.init(frame: frame, isPreview: isPreview)
         commonInit()
     }
@@ -42,12 +44,16 @@ class SpacesaverView: ScreenSaverView {
     }
 
     private func commonInit() {
+        NSLog("Spacesaver: commonInit() started")
         animationTimeInterval = 1.0 / 30.0 // 30 FPS
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
 
+        NSLog("Spacesaver: calling setupViews()")
         setupViews()
+        NSLog("Spacesaver: calling initializeRustLibrary()")
         initializeRustLibrary()
+        NSLog("Spacesaver: commonInit() completed")
     }
 
     deinit {
@@ -174,9 +180,12 @@ class SpacesaverView: ScreenSaverView {
     }
 
     private func fetchImagesInBackground() {
-        DispatchQueue.global(qos: .background).async { [weak self] in
-            // Fetch some random images to start
-            let fetched = spacesaver_fetch_random(self?.prefetchCount ?? 10)
+        // Use userInitiated QoS - background QoS doesn't execute reliably in screensaver context
+        let count = self.prefetchCount
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            NSLog("Spacesaver: Starting fetch of \(count) images")
+            let fetched = spacesaver_fetch_random(count)
+            NSLog("Spacesaver: Fetch returned \(fetched) images")
 
             DispatchQueue.main.async {
                 self?.showLoading(false)
@@ -184,8 +193,7 @@ class SpacesaverView: ScreenSaverView {
                     self?.loadNextImage()
                     self?.startTransitionTimer()
                 } else {
-                    // Show error or retry
-                    NSLog("Spacesaver: Failed to fetch images")
+                    NSLog("Spacesaver: Failed to fetch images, will retry on next animation start")
                 }
             }
         }
