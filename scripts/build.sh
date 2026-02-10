@@ -171,6 +171,11 @@ swiftc \
 mkdir -p "$CONTENTS_DIR/Frameworks"
 cp "$BUILD_DIR/libSpacesaver.dylib" "$CONTENTS_DIR/Frameworks/" 2>/dev/null || true
 
+# Code sign the bundle
+echo -e "${YELLOW}Signing bundle...${NC}"
+codesign --force --deep --sign "Apple Development: Scott Nixon (8XVMGBR5UZ)" "$BUNDLE_DIR"
+echo -e "${GREEN}Bundle signed successfully${NC}"
+
 echo -e "${GREEN}=== Build Complete ===${NC}"
 echo -e "Screen saver bundle: ${YELLOW}$BUNDLE_DIR${NC}"
 echo ""
