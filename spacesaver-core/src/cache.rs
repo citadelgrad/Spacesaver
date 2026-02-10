@@ -247,27 +247,99 @@ mod tests {
         (cache, temp_dir)
     }
 
-    #[test]
-    fn test_cache_operations() {
-        let (mut cache, _temp) = create_test_cache();
-
-        let apod = ApodResponse {
-            date: "2024-01-15".to_string(),
-            title: "Test".to_string(),
+    fn make_apod(date: &str) -> ApodResponse {
+        ApodResponse {
+            date: date.to_string(),
+            title: format!("Test {}", date),
             explanation: "Test explanation".to_string(),
-            url: "https://example.com/test.jpg".to_string(),
+            url: format!("https://example.com/{}.jpg", date),
             hdurl: None,
             media_type: "image".to_string(),
             copyright: None,
             service_version: None,
             thumbnail_url: None,
-        };
+        }
+    }
 
+    fn create_test_cache_with_max(max_size: usize) -> (ImageCache, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let cache = ImageCache {
+            cache_dir: temp_dir.path().to_path_buf(),
+            index: CacheIndex::default(),
+            max_size,
+        };
+        (cache, temp_dir)
+    }
+
+    #[test]
+    fn test_cache_operations() {
+        let (mut cache, _temp) = create_test_cache();
+
+        let apod = make_apod("2024-01-15");
         let data = b"fake image data";
         let path = cache.store_image(&apod, data).unwrap();
 
         assert!(cache.has_image("2024-01-15"));
         assert!(path.exists());
         assert_eq!(cache.image_count(), 1);
+    }
+
+    #[test]
+    fn test_has_image_returns_false_for_missing_date() {
+        let (cache, _temp) = create_test_cache();
+        assert!(!cache.has_image("2024-01-01"));
+    }
+
+    #[test]
+    fn test_enforce_size_limit_evicts_oldest() {
+        let (mut cache, _temp) = create_test_cache_with_max(3);
+
+        // Add exactly max_size items with staggered cached_at times
+        for i in 1..=3 {
+            let apod = make_apod(&format!("2024-01-{:02}", i));
+            cache.store_image(&apod, b"data").unwrap();
+            // Ensure different cached_at by manually adjusting
+            if let Some(m) = cache.index.images.get_mut(&format!("2024-01-{:02}", i)) {
+                m.cached_at = i as i64;
+            }
+        }
+        assert_eq!(cache.image_count(), 3);
+
+        // Add one more — oldest (cached_at=1, date 2024-01-01) should be evicted
+        let apod = make_apod("2024-01-04");
+        cache.store_image(&apod, b"data").unwrap();
+        if let Some(m) = cache.index.images.get_mut("2024-01-04") {
+            m.cached_at = 4;
+        }
+
+        assert_eq!(cache.image_count(), 3);
+        assert!(!cache.has_image("2024-01-01"), "oldest entry should be evicted");
+        assert!(cache.has_image("2024-01-04"), "newest entry should exist");
+    }
+
+    #[test]
+    fn test_enforce_size_limit_boundary_at_max() {
+        let (mut cache, _temp) = create_test_cache_with_max(3);
+
+        // Add exactly max_size items — no eviction should happen
+        for i in 1..=3 {
+            cache.store_image(&make_apod(&format!("2024-01-{:02}", i)), b"data").unwrap();
+        }
+        assert_eq!(cache.image_count(), 3);
+        assert!(cache.has_image("2024-01-01"));
+        assert!(cache.has_image("2024-01-02"));
+        assert!(cache.has_image("2024-01-03"));
+    }
+
+    #[test]
+    fn test_get_all_dates_sorted_newest_first() {
+        let (mut cache, _temp) = create_test_cache();
+
+        cache.store_image(&make_apod("2024-01-01"), b"data").unwrap();
+        cache.store_image(&make_apod("2024-01-03"), b"data").unwrap();
+        cache.store_image(&make_apod("2024-01-02"), b"data").unwrap();
+
+        let dates = cache.get_all_dates();
+        assert_eq!(dates, vec!["2024-01-03", "2024-01-02", "2024-01-01"]);
     }
 }

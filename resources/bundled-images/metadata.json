@@ -1,62 +1,62 @@
 [
   {
+    "filename": "carina_cosmic_cliffs.jpg",
+    "title": "Cosmic Cliffs in the Carina Nebula (JWST)",
+    "date": "2022-07-12",
+    "copyright": null
+  },
+  {
+    "filename": "southern_ring_nebula.jpg",
+    "title": "Southern Ring Nebula (JWST)",
+    "date": "2022-07-12",
+    "copyright": null
+  },
+  {
+    "filename": "mystic_mountain.jpg",
+    "title": "Mystic Mountain in the Carina Nebula",
+    "date": "2010-04-22",
+    "copyright": null
+  },
+  {
     "filename": "pillars_of_creation.jpg",
-    "title": "Pillars of Creation",
+    "title": "Pillars of Creation (Hubble High Definition)",
     "date": "2015-01-05",
     "copyright": null
   },
   {
-    "filename": "blue_marble.jpg",
-    "title": "Blue Marble: Earth from Space",
-    "date": "1972-12-07",
+    "filename": "andromeda_panorama.jpg",
+    "title": "Hubble Panoramic View of the Andromeda Galaxy",
+    "date": "2015-01-05",
     "copyright": null
   },
   {
-    "filename": "earthrise.jpg",
-    "title": "Earthrise",
-    "date": "1968-12-24",
+    "filename": "whirlpool_galaxy.jpg",
+    "title": "The Whirlpool Galaxy (Hubble)",
+    "date": "2005-04-25",
     "copyright": null
   },
   {
-    "filename": "saturn_rings.jpg",
-    "title": "Saturn and Its Rings",
-    "date": "2016-09-15",
+    "filename": "tarantula_nebula.jpg",
+    "title": "Tarantula Nebula Multi-wavelength Composite",
+    "date": "2012-04-17",
     "copyright": null
   },
   {
-    "filename": "hubble_deep_field.jpg",
-    "title": "Hubble Deep Field",
-    "date": "1996-01-15",
+    "filename": "sombrero_galaxy.jpg",
+    "title": "Sombrero Galaxy in Infrared (Spitzer)",
+    "date": "2005-05-04",
     "copyright": null
   },
   {
-    "filename": "orion_nebula.jpg",
-    "title": "Orion Nebula",
-    "date": "2013-04-15",
+    "filename": "andromeda_infrared.jpg",
+    "title": "Andromeda Galaxy in Infrared (Spitzer)",
+    "date": "2024-05-09",
     "copyright": null
   },
   {
-    "filename": "mars_surface.jpg",
-    "title": "Mars Surface View",
-    "date": "2017-07-25",
-    "copyright": null
-  },
-  {
-    "filename": "galaxy_ngc1300.jpg",
-    "title": "Barred Spiral Galaxy NGC 1300",
-    "date": "2005-01-11",
-    "copyright": null
-  },
-  {
-    "filename": "astronaut_spacewalk.jpg",
-    "title": "Astronaut Spacewalk",
-    "date": "2018-10-11",
-    "copyright": null
-  },
-  {
-    "filename": "jupiter_great_red_spot.jpg",
-    "title": "Jupiter's Great Red Spot",
-    "date": "2017-07-10",
+    "filename": "ring_nebula.jpg",
+    "title": "Ring Nebula (Hubble Composite)",
+    "date": "2013-05-23",
     "copyright": null
   }
 ]

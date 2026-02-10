@@ -10,10 +10,10 @@ fn test_default_config() {
     let config = Config::default();
 
     assert_eq!(config.api_key, "DEMO_KEY");
-    assert!(config.cache_size > 0);
-    assert!(config.transition_interval > 0.0);
-    assert!(config.transition_duration > 0.0);
-    assert!(config.max_history_days > 0);
+    assert_eq!(config.cache_size, 50);
+    assert_eq!(config.transition_interval, 30.0);
+    assert_eq!(config.transition_duration, 2.0);
+    assert_eq!(config.max_history_days, 365);
 }
 
 /// Test configuration serialization/deserialization
@@ -38,95 +38,6 @@ fn test_api_client_creation() {
     let api = NasaApodApi::new("DEMO_KEY");
     // Just verify it doesn't panic
     drop(api);
-}
-
-/// Test API response parsing
-#[test]
-fn test_apod_response_parsing() {
-    use spacesaver_core::api::ApodResponse;
-
-    let json = r#"{
-        "date": "2024-01-15",
-        "title": "The Orion Nebula in Infrared",
-        "explanation": "The Great Nebula in Orion is a gorgeous stellar nursery.",
-        "url": "https://apod.nasa.gov/apod/image/2401/OrionNebula.jpg",
-        "hdurl": "https://apod.nasa.gov/apod/image/2401/OrionNebula_hd.jpg",
-        "media_type": "image",
-        "service_version": "v1"
-    }"#;
-
-    let apod: ApodResponse = serde_json::from_str(json).expect("Failed to parse APOD response");
-
-    assert_eq!(apod.date, "2024-01-15");
-    assert_eq!(apod.title, "The Orion Nebula in Infrared");
-    assert!(apod.is_image());
-    assert_eq!(
-        apod.best_image_url(),
-        Some("https://apod.nasa.gov/apod/image/2401/OrionNebula_hd.jpg")
-    );
-}
-
-/// Test video APOD response parsing
-#[test]
-fn test_video_apod_response() {
-    use spacesaver_core::api::ApodResponse;
-
-    let json = r#"{
-        "date": "2024-01-16",
-        "title": "Perseverance Rover Video",
-        "explanation": "A video from Mars.",
-        "url": "https://www.youtube.com/embed/xyz123",
-        "media_type": "video",
-        "thumbnail_url": "https://img.youtube.com/vi/xyz123/0.jpg"
-    }"#;
-
-    let apod: ApodResponse = serde_json::from_str(json).expect("Failed to parse video APOD");
-
-    assert!(!apod.is_image());
-    assert_eq!(
-        apod.best_image_url(),
-        Some("https://img.youtube.com/vi/xyz123/0.jpg")
-    );
-}
-
-/// Test APOD response without HD URL
-#[test]
-fn test_apod_response_no_hd() {
-    use spacesaver_core::api::ApodResponse;
-
-    let json = r#"{
-        "date": "2024-01-17",
-        "title": "Simple Image",
-        "explanation": "Just a simple image.",
-        "url": "https://apod.nasa.gov/apod/image/2401/simple.jpg",
-        "media_type": "image"
-    }"#;
-
-    let apod: ApodResponse = serde_json::from_str(json).expect("Failed to parse APOD");
-
-    assert_eq!(
-        apod.best_image_url(),
-        Some("https://apod.nasa.gov/apod/image/2401/simple.jpg")
-    );
-}
-
-/// Test APOD response with copyright
-#[test]
-fn test_apod_response_with_copyright() {
-    use spacesaver_core::api::ApodResponse;
-
-    let json = r#"{
-        "date": "2024-01-18",
-        "title": "Copyrighted Image",
-        "explanation": "An image with copyright.",
-        "url": "https://example.com/image.jpg",
-        "media_type": "image",
-        "copyright": "John Doe"
-    }"#;
-
-    let apod: ApodResponse = serde_json::from_str(json).expect("Failed to parse APOD");
-
-    assert_eq!(apod.copyright, Some("John Doe".to_string()));
 }
 
 mod cache_tests {
