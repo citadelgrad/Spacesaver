@@ -173,7 +173,7 @@ cp "$BUILD_DIR/libSpacesaver.dylib" "$CONTENTS_DIR/Frameworks/" 2>/dev/null || t
 
 # Code sign the bundle
 echo -e "${YELLOW}Signing bundle...${NC}"
-codesign --force --deep --sign "Apple Development: Scott Nixon (8XVMGBR5UZ)" "$BUNDLE_DIR"
+codesign --force --deep --sign "Developer ID Application: Happy Herbivore Inc (4GL2WVZGB7)" "$BUNDLE_DIR"
 echo -e "${GREEN}Bundle signed successfully${NC}"
 
 echo -e "${GREEN}=== Build Complete ===${NC}"

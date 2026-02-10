@@ -10,7 +10,7 @@ use std::sync::Arc;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 
-use crate::config::Config;
+use crate::config::{Config, ImageSource};
 use crate::image_manager::ImageManager;
 use crate::logging;
 
@@ -406,6 +406,60 @@ pub unsafe extern "C" fn spacesaver_set_api_key(api_key: *const c_char) -> Space
     };
 
     config.set_api_key(key);
+
+    match config.save() {
+        Ok(_) => SpacesaverResult::ok(),
+        Err(e) => SpacesaverResult::err(&format!("Failed to save config: {}", e)),
+    }
+}
+
+/// Get the current image source as a string
+/// Returns a C string that must be freed with spacesaver_free_string
+#[no_mangle]
+pub extern "C" fn spacesaver_get_image_source() -> *mut c_char {
+    match Config::load() {
+        Ok(config) => {
+            let source = match config.image_source {
+                ImageSource::Bundled => "bundled",
+                ImageSource::Apod => "apod",
+                ImageSource::NasaImages => "nasa_images",
+                ImageSource::ApodWithFallback => "apod_with_fallback",
+            };
+            to_c_string(source)
+        }
+        Err(_) => to_c_string("bundled"),
+    }
+}
+
+/// Set the image source
+///
+/// # Safety
+/// source must be a valid null-terminated string: "bundled", "apod", "nasa_images", or "apod_with_fallback"
+#[no_mangle]
+pub unsafe extern "C" fn spacesaver_set_image_source(source: *const c_char) -> SpacesaverResult {
+    if source.is_null() {
+        return SpacesaverResult::err("Image source is null");
+    }
+
+    let source_str = match CStr::from_ptr(source).to_str() {
+        Ok(s) => s,
+        Err(_) => return SpacesaverResult::err("Invalid UTF-8 in image source"),
+    };
+
+    let image_source = match source_str {
+        "bundled" => ImageSource::Bundled,
+        "apod" => ImageSource::Apod,
+        "nasa_images" => ImageSource::NasaImages,
+        "apod_with_fallback" => ImageSource::ApodWithFallback,
+        _ => return SpacesaverResult::err("Invalid image source"),
+    };
+
+    let mut config = match Config::load() {
+        Ok(c) => c,
+        Err(e) => return SpacesaverResult::err(&format!("Failed to load config: {}", e)),
+    };
+
+    config.set_image_source(image_source);
 
     match config.save() {
         Ok(_) => SpacesaverResult::ok(),

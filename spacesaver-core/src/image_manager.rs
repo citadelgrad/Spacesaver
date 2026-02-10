@@ -154,6 +154,10 @@ impl ImageManager {
 
     fn do_fetch_random(&self, count: u32) -> Result<Vec<PathBuf>> {
         match self.config.image_source {
+            ImageSource::Bundled => {
+                logging::log_info("Using bundled images, no network fetch needed");
+                Ok(vec![])
+            }
             ImageSource::Apod => self.fetch_from_apod(count),
             ImageSource::NasaImages => self.fetch_from_nasa_images(count),
             ImageSource::ApodWithFallback => {
@@ -413,6 +417,12 @@ impl ImageManager {
 
             // Fetch images based on configured source
             let apods_result = match image_source {
+                ImageSource::Bundled => {
+                    // No network fetch needed for bundled images
+                    let mut s = state.write();
+                    s.is_fetching = false;
+                    return;
+                }
                 ImageSource::Apod => apod_api.fetch_random(count),
                 ImageSource::NasaImages => images_api.fetch_random_as_apod(count),
                 ImageSource::ApodWithFallback => apod_api.fetch_random(count).or_else(|e| {

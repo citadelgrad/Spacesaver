@@ -10,12 +10,14 @@ use crate::error::{Error, Result};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ImageSource {
+    /// Bundled nebula/galaxy images (no network required)
+    #[default]
+    Bundled,
     /// NASA Astronomy Picture of the Day (requires API key)
     Apod,
     /// NASA Image and Video Library (no API key required)
     NasaImages,
     /// Try APOD first, fall back to NASA Images if unavailable
-    #[default]
     ApodWithFallback,
 }
 
@@ -23,6 +25,7 @@ impl ImageSource {
     /// Get a human-readable name for the source
     pub fn display_name(&self) -> &'static str {
         match self {
+            ImageSource::Bundled => "Bundled Images",
             ImageSource::Apod => "NASA APOD",
             ImageSource::NasaImages => "NASA Image Library",
             ImageSource::ApodWithFallback => "APOD with Fallback",
@@ -130,6 +133,11 @@ impl Config {
     /// Update API key
     pub fn set_api_key(&mut self, key: String) {
         self.api_key = key;
+    }
+
+    /// Update image source
+    pub fn set_image_source(&mut self, source: ImageSource) {
+        self.image_source = source;
     }
 }
 
