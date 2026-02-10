@@ -1,0 +1,23 @@
+scripts/build.sh
+  a325ae3bc27cae57 174-178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.1",
+  "base_commit_sha": "3fbc8c1fb6a9d8d5c4e4b251c185bc991ea7743f",
+  "prompts": {
+    "a325ae3bc27cae57": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2688b4c0-001f-4c59-8074-783e8186d860",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Scott Nixon <citadelgrad@gmail.com>",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 0,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}
